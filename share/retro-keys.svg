@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Retro Keys">
+  <rect width="128" height="128" rx="28" fill="#161014"/>
+  <circle cx="46" cy="66" r="30" fill="#e10600"/>
+  <circle cx="86" cy="66" r="30" fill="#f4efe6"/>
+  <text x="46" y="76" text-anchor="middle" font-family="sans-serif" font-size="32" font-weight="700" fill="#fff8f4">A</text>
+  <text x="86" y="76" text-anchor="middle" font-family="sans-serif" font-size="32" font-weight="700" fill="#241418">B</text>
+</svg>

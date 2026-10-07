@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Retro Keys
+Comment=Program 8BitDo Retro Keyboard Super Buttons
+Exec=retro-keys
+Icon=online.meijokoen.RetroKeys
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;
+Keywords=8BitDo;keyboard;macro;
+StartupNotify=true
+StartupWMClass=online.meijokoen.RetroKeys

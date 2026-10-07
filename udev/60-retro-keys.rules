@@ -1,0 +1,4 @@
+# Config interface of the 8BitDo Retro Keyboard (interface 2 only).
+# Do not unbind usbhid. The keyboard itself has to keep typing.
+ACTION=="add", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="5200", ATTRS{bInterfaceNumber}=="02", TAG+="uaccess", MODE="0660"
+ACTION=="add", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="5209", ATTRS{bInterfaceNumber}=="02", TAG+="uaccess", MODE="0660"
