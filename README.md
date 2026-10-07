@@ -46,11 +46,11 @@ cd /home/tim/personal-git/retro-keys
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-The tests check the packet format. They do not open the keyboard.
+The tests check the packet format and the on-screen layout. They do not open the keyboard.
 
 ## Before a public release
 
-The window still needs a small interface pass. A public release also needs packages for NixOS and for general Linux: Debian, Ubuntu, Fedora, and RHEL.
+The window has the keyboard drawing, colour editions, and jack selection. A public release still needs packages for NixOS and for general Linux: Debian, Ubuntu, Fedora, and RHEL.
 
 ## License
 

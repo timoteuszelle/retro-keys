@@ -14,14 +14,14 @@ from .device import KeyboardError, open_keyboard
 from .keys import (
     FEATURED,
     JACKS,
-    KEYBOARD_SOURCES,
     MODIFIERS,
-    ONBOARD,
     USAGES,
     hid_from_keycode,
     is_modifier,
     source_title,
 )
+from .layout import ROWS, board_key_for_usage, search_hits
+from .theme import EDITIONS, edition_by_id, load_edition_id, save_edition_id
 from .protocol import (
     DELAY,
     DOWN,
@@ -34,101 +34,11 @@ from .protocol import (
     ProfileError,
 )
 
-CSS = """
-window.retro { background-color: #161014; }
-window.retro headerbar {
-  background: #1c1216;
-  box-shadow: none;
-}
-window.retro entry { background-color: #2a1c22; color: #f6efe6; }
-.hint { color: #cbbbae; font-size: 13px; }
-.jack {
-  background-color: #2a1c22;
-  border-radius: 18px;
-  padding: 12px 14px 14px;
-}
-.jack.primary { box-shadow: inset 0 0 0 1px #e2b340; }
-.jack-title { font-weight: 700; }
-.jack-note { color: #e2b340; font-size: 11px; }
-button.pad {
-  min-width: 92px;
-  min-height: 92px;
-  padding: 0;
-  border-radius: 46px;
-  font-size: 26px;
-  font-weight: 800;
-  background-image: none;
-  border: 3px solid transparent;
-  box-shadow: none;
-}
-button.pad.a { background-color: #e10600; color: #fff8f4; }
-button.pad.b { background-color: #f3ead8; color: #241418; }
-button.pad:hover { filter: brightness(1.06); }
-button.pad.is-on { box-shadow: 0 0 0 1px rgba(255,255,255,0.16); }
-button.keycap {
-  min-width: 92px;
-  min-height: 52px;
-  border-radius: 10px;
-  font-weight: 700;
-  background-image: none;
-  background-color: #3a2830;
-  color: #f6efe6;
-  border: 3px solid transparent;
-}
-button.pad.is-selected, button.keycap.is-selected { border-color: #e2b340; }
-.cap { color: #d9cdc2; font-size: 12px; }
-.summary { font-size: 22px; font-weight: 700; }
-.editor {
-  background-color: #24181e;
-  border-radius: 18px;
-  padding: 16px;
-}
-.mode-switch {
-  background-color: #1a1014;
-  border-radius: 12px;
-  padding: 3px;
-}
-.mode-switch button {
-  background-image: none;
-  background-color: transparent;
-  box-shadow: none;
-  border-radius: 9px;
-  color: #d9cdc2;
-  font-weight: 700;
-}
-.mode-switch button:checked {
-  background-color: #e10600;
-  color: #fff8f4;
-}
-.response-area {
-  background-color: #24181e;
-}
-.response-area > button {
-  background-image: none;
-  background-color: #3a2830;
-  color: #f6efe6;
-  box-shadow: none;
-}
-.response-area > button.destructive-action,
-.response-area > button.suggested-action {
-  background-color: #e10600;
-  color: #fff8f4;
-}
-window.retro scrolledwindow,
-window.retro viewport,
-window.retro list,
-window.retro list > row {
-  background-color: #1c1216;
-  color: #f6efe6;
-}
-window.retro list > row:hover {
-  background-color: #322028;
-}
-window.retro list > row:selected {
-  background-color: #3a2830;
-  color: #fff8f4;
-}
-"""
+# Quarter key-unit in pixels. layout.py rows sum to 74 of these.
+_CELL = 8
+# The pad buttons are circles. The slot around them is the jack hit area.
+_PAD = 76
+_JACK_OF = {code: name for name, button_a, button_b, _primary in JACKS for code in (button_a, button_b)}
 
 HINT = (
     "One pad belongs in the X jack. Mappings are stored on the keyboard. "
@@ -149,16 +59,24 @@ class RetroApp(Adw.Application):
     def __init__(self) -> None:
         super().__init__(application_id="online.meijokoen.RetroKeys")
         Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+        self._provider = Gtk.CssProvider()
+        self._provider_added = False
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
-        provider = Gtk.CssProvider()
-        provider.load_from_string(CSS)
+        self.apply_edition(edition_by_id("fami"))
+
+    def apply_edition(self, edition) -> None:
+        # One stylesheet for the whole window, rebuilt from the colour edition.
+        # New widgets should use the role classes (kb.alpha, pad.a, ...) rather
+        # than a hard-coded colour, so the Colour menu can restyle them.
+        self._provider.load_from_string(edition.palette.css())
         display = Gdk.Display.get_default()
-        if display is not None:
+        if display is not None and not self._provider_added:
             Gtk.StyleContext.add_provider_for_display(
-                display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                display, self._provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
             )
+            self._provider_added = True
 
     def do_activate(self) -> None:
         win = self.props.active_window
@@ -178,13 +96,18 @@ class RetroWindow(Adw.ApplicationWindow):
 
         self.saved = Profile()
         self.profile = Profile()
-        self.selected = JACKS[2][1]  # Jack X, button A
+        self.selected: int | None = JACKS[2][1]  # Jack X, button A
+        self.selected_jack: str | None = JACKS[2][0]
         self.filling = False
         self.listening = False
         self.recording = False
         self.held: set[int] = set()
         self.last_event: float | None = None
+        self.find_query = ""
         self.pads: dict[int, tuple[Gtk.Button, Gtk.Label]] = {}
+        self.keys: dict[int, Gtk.Button] = {}
+        self.jack_cards: dict[int, Gtk.Widget] = {}
+        self.edition = edition_by_id(load_edition_id())
 
         self.toast = Adw.ToastOverlay()
         view = Adw.ToolbarView()
@@ -210,6 +133,19 @@ class RetroWindow(Adw.ApplicationWindow):
         self.name_entry = Gtk.Entry(placeholder_text="Profile name", max_length=14, width_chars=14)
         self.name_entry.connect("changed", self._on_name)
         header.pack_start(self.name_entry)
+        colour = Gtk.Box(spacing=6)
+        colour_label = Gtk.Label(label="Colour")
+        colour_label.add_css_class("hint")
+        self.edition_drop = Gtk.DropDown.new_from_strings([edition.name for edition in EDITIONS])
+        self.edition_drop.set_selected(EDITIONS.index(self.edition))
+        self.edition_drop.set_tooltip_text("Same keys on every edition. This changes the colours.")
+        self.edition_drop.connect("notify::selected", self._on_edition)
+        colour.append(colour_label)
+        colour.append(self.edition_drop)
+        header.pack_start(colour)
+        application = self.get_application()
+        if isinstance(application, RetroApp):
+            application.apply_edition(self.edition)
         refresh = Gtk.Button(label="Read")
         refresh.connect("clicked", lambda *_: self._reload(confirm=True))
         header.pack_end(refresh)
@@ -255,19 +191,11 @@ class RetroWindow(Adw.ApplicationWindow):
         hint.add_css_class("hint")
         left.append(hint)
         jacks = Gtk.Box(spacing=12, homogeneous=True)
-        for jack, button_a, button_b, primary in JACKS:
-            jacks.append(self._jack(jack, button_a, button_b, primary))
+        for jack, button_a, button_b, _primary in JACKS:
+            jacks.append(self._jack(jack, button_a, button_b))
         left.append(jacks)
-
-        board_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        label = Gtk.Label(label="On the keyboard", xalign=0)
-        label.add_css_class("jack-title")
-        board = Gtk.Box(spacing=16, halign=Gtk.Align.START)
-        for name, code in ONBOARD:
-            board.append(self._keycap(name, code))
-        board_col.append(label)
-        board_col.append(board)
-        left.append(board_col)
+        left.append(self._finder())
+        left.append(self._board())
 
         self.others = Gtk.ListBox()
         self.others.add_css_class("boxed-list")
@@ -279,38 +207,170 @@ class RetroWindow(Adw.ApplicationWindow):
         other_label.add_css_class("hint")
         other_wrap.append(other_label)
         other_wrap.append(self.others)
-        more = Gtk.Button(label="Edit another key…")
-        more.set_halign(Gtk.Align.START)
-        more.connect("clicked", lambda *_: self._pick_source())
-        other_wrap.append(more)
         left.append(other_wrap)
         root.append(left)
         root.append(self._editor())
         return root
 
-    def _jack(self, name: str, code_a: int, code_b: int, primary: bool) -> Gtk.Widget:
+    def _jack(self, name: str, code_a: int, code_b: int) -> Gtk.Widget:
+        # Three hit areas. The card selects the jack. A and B select the jack
+        # and that button. The gesture watches the card in the capture phase
+        # and steps aside when the click lands on a pad button.
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         card.add_css_class("jack")
-        if primary:
-            card.add_css_class("primary")
+        card.jack_name = name
+        card.set_cursor(Gdk.Cursor.new_from_name("pointer"))
+        card.set_tooltip_text(f"Jack {name}. Click A or B to edit that button.")
+        self.jack_cards[code_a] = card
+        self.jack_cards[code_b] = card
+        click = Gtk.GestureClick()
+        click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        click.set_exclusive(False)
+        click.connect("pressed", self._on_jack_pressed, card)
+        click.connect("released", self._on_jack_released, card)
+        card.add_controller(click)
         title = Gtk.Label(label=f"Jack {name}", xalign=0)
         title.add_css_class("jack-title")
         card.append(title)
-        if primary:
-            note = Gtk.Label(label="Single pad goes here", xalign=0)
-            note.add_css_class("jack-note")
-            card.append(note)
         row = Gtk.Box(spacing=10, homogeneous=True)
         row.append(self._pad("A", code_a, "a"))
         row.append(self._pad("B", code_b, "b"))
         card.append(row)
         return card
 
+    def _on_jack_pressed(self, gesture, _n_press, x: float, y: float, card) -> None:
+        if self._pad_at(card, x, y):
+            gesture.set_state(Gtk.EventSequenceState.DENIED)
+        else:
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+
+    def _on_jack_released(self, _gesture, _n_press, x: float, y: float, card) -> None:
+        if self._pad_at(card, x, y):
+            return
+        self._select_jack(card.jack_name)
+
+    def _pad_at(self, card, x: float, y: float) -> bool:
+        target = card.pick(x, y, Gtk.PickFlags.DEFAULT)
+        while target is not None and target is not card:
+            if isinstance(target, Gtk.Button) and "pad" in target.get_css_classes():
+                return True
+            target = target.get_parent()
+        return False
+
+    def _finder(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.find_entry = Gtk.SearchEntry(placeholder_text="Find a key")
+        self.find_entry.connect("search-changed", self._on_find)
+        self.find_entry.connect("activate", self._on_find_activate)
+        self.find_entry.connect("notify::has-focus", self._search_focused)
+        self.find_list = Gtk.ListBox()
+        self.find_list.add_css_class("boxed-list")
+        self.find_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.find_list.set_activate_on_single_click(True)
+        self.find_list.connect("row-activated", self._on_find_row)
+        self.find_scroll = Gtk.ScrolledWindow(child=self.find_list, vexpand=False)
+        self.find_scroll.set_propagate_natural_height(True)
+        self.find_scroll.set_max_content_height(140)
+        self.find_scroll.set_visible(False)
+        self.find_empty = Gtk.Label(label="No matching key", xalign=0)
+        self.find_empty.add_css_class("hint")
+        self.find_empty.set_visible(False)
+        box.append(self.find_entry)
+        box.append(self.find_scroll)
+        box.append(self.find_empty)
+        return box
+
+    def _board(self) -> Gtk.Widget:
+        frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        frame.add_css_class("board")
+        frame.set_halign(Gtk.Align.CENTER)
+        for row in ROWS:
+            line = Gtk.Box(spacing=0)
+            for cell in row:
+                # The slot is the column. The cap is 2px smaller on every
+                # side and centered, so a label cannot shove the next key
+                # and the arrow columns stay on the same grid.
+                slot = Gtk.Box()
+                slot.set_size_request(cell.span * _CELL, _CELL * 4)
+                if cell.kind == "gap":
+                    line.append(slot)
+                    continue
+                button = Gtk.Button(label=cell.label)
+                button.add_css_class("kb")
+                button.add_css_class(cell.role)
+                button.set_size_request(cell.span * _CELL - 4, _CELL * 4 - 4)
+                button.set_halign(Gtk.Align.CENTER)
+                button.set_valign(Gtk.Align.CENTER)
+                button.set_tooltip_text(source_title(cell.code))
+                child = button.get_child()
+                if isinstance(child, Gtk.Label):
+                    child.set_ellipsize(Pango.EllipsizeMode.END)
+                button.connect("clicked", lambda *_b, code=cell.code: self._select(code))
+                self.keys[cell.code] = button
+                slot.append(button)
+                line.append(slot)
+            frame.append(line)
+        # The drawing is wider than a narrow tile. Scroll sideways instead of
+        # clipping the arrow keys. A wide window shows it in full, with no bar.
+        scroll = Gtk.ScrolledWindow(child=frame, hexpand=True, vexpand=False)
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        scroll.set_propagate_natural_width(True)
+        scroll.set_propagate_natural_height(True)
+        return scroll
+
+    def _on_edition(self, dropdown, _param) -> None:
+        index = dropdown.get_selected()
+        if index < 0 or index >= len(EDITIONS) or EDITIONS[index].id == self.edition.id:
+            return
+        self.edition = EDITIONS[index]
+        save_edition_id(self.edition.id)
+        app = self.get_application()
+        if isinstance(app, RetroApp):
+            app.apply_edition(self.edition)
+
+    def _on_find(self, entry: Gtk.SearchEntry) -> None:
+        self.find_query = entry.get_text()
+        self._rebuild_find()
+        self._paint_sources()
+        self._mark_find()
+
+    def _on_find_activate(self, _entry: Gtk.SearchEntry) -> None:
+        hits = search_hits(self.find_query)
+        if hits:
+            self._select(hits[0])
+
+    def _on_find_row(self, _box, row) -> None:
+        self._select(row.code)
+
+    def _rebuild_find(self) -> None:
+        while (row := self.find_list.get_row_at_index(0)) is not None:
+            self.find_list.remove(row)
+        hits = search_hits(self.find_query)
+        query = self.find_query.strip()
+        # A scrolled window collapses to nothing unless it is given a height.
+        # Four rows is enough to scan; the rest scroll.
+        self.find_scroll.set_min_content_height(min(len(hits), 4) * 36 if hits else 0)
+        self.find_scroll.set_visible(bool(query and hits))
+        self.find_empty.set_visible(bool(query) and not hits)
+        for code in hits:
+            label = Gtk.Label(label=source_title(code), xalign=0)
+            label.set_margin_start(8)
+            label.set_margin_top(4)
+            label.set_margin_bottom(4)
+            item = Gtk.ListBoxRow()
+            item.set_child(label)
+            item.code = code
+            self.find_list.append(item)
+
     def _pad(self, letter: str, code: int, kind: str) -> Gtk.Widget:
         col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         button = Gtk.Button(label=letter)
         button.add_css_class("pad")
         button.add_css_class(kind)
+        button.set_size_request(_PAD, _PAD)
+        button.set_halign(Gtk.Align.CENTER)
+        button.set_valign(Gtk.Align.CENTER)
+        button.set_hexpand(False)
         button.connect("clicked", lambda *_b, c=code: self._select(c))
         caption = Gtk.Label(label="—")
         caption.add_css_class("cap")
@@ -320,18 +380,6 @@ class RetroWindow(Adw.ApplicationWindow):
         col.append(button)
         col.append(caption)
         return col
-
-    def _keycap(self, name: str, code: int) -> Gtk.Widget:
-        button = Gtk.Button(label=name)
-        button.add_css_class("keycap")
-        button.connect("clicked", lambda *_b, c=code: self._select(c))
-        caption = Gtk.Label(label="—")
-        caption.add_css_class("cap")
-        self.pads[code] = (button, caption)
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        box.append(button)
-        box.append(caption)
-        return box
 
     def _editor(self) -> Gtk.Widget:
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -345,6 +393,8 @@ class RetroWindow(Adw.ApplicationWindow):
         card.append(self.editor_title)
         card.append(self.editor_summary)
 
+        self.editor_controls = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, vexpand=True)
+        card.append(self.editor_controls)
         self.mode = Gtk.Stack()
         self.mode.add_named(self._key_page(), "key")
         self.mode.add_named(self._chord_page(), "chord")
@@ -362,12 +412,12 @@ class RetroWindow(Adw.ApplicationWindow):
             button.connect("toggled", self._on_mode, name)
             self._mode_buttons[name] = button
             switcher.append(button)
-        card.append(switcher)
-        card.append(self.mode)
+        self.editor_controls.append(switcher)
+        self.editor_controls.append(self.mode)
 
         clear = Gtk.Button(label="Clear this button")
         clear.connect("clicked", lambda *_: self._assign(None))
-        card.append(clear)
+        self.editor_controls.append(clear)
         return card
 
     def _key_page(self) -> Gtk.Widget:
@@ -492,7 +542,7 @@ class RetroWindow(Adw.ApplicationWindow):
         self.filling = False
         self.listening = False
         self.recording = False
-        self._select(self.selected)
+        self._restore_selection()
 
     def _write(self) -> None:
         if not self._dirty():
@@ -535,7 +585,7 @@ class RetroWindow(Adw.ApplicationWindow):
         self.filling = True
         self.name_entry.set_text("")
         self.filling = False
-        self._select(self.selected)
+        self._restore_selection()
         self._toast("Profile erased.")
 
     def _ask(self, heading: str, body: str, accept: str, callback, destructive: bool = False) -> None:
@@ -555,8 +605,25 @@ class RetroWindow(Adw.ApplicationWindow):
 
         dialog.choose(self, None, done)
 
+    def _restore_selection(self) -> None:
+        if self.selected is not None:
+            self._select(self.selected)
+        elif self.selected_jack:
+            self._select_jack(self.selected_jack)
+        else:
+            self._select(JACKS[2][1])
+
     def _select(self, code: int) -> None:
         self.selected = code
+        self.selected_jack = _JACK_OF.get(code)
+        self._arm_editor()
+
+    def _select_jack(self, name: str) -> None:
+        self.selected = None
+        self.selected_jack = name
+        self._arm_editor()
+
+    def _arm_editor(self) -> None:
         self.listening = False
         self.recording = False
         self.held.clear()
@@ -565,6 +632,12 @@ class RetroWindow(Adw.ApplicationWindow):
         self._paint()
 
     def _fill_editor(self) -> None:
+        jack_only = self.selected is None
+        self.editor_controls.set_visible(not jack_only)
+        if jack_only:
+            self.editor_title.set_text(f"Jack {self.selected_jack}" if self.selected_jack else "")
+            self.editor_summary.set_text("Choose A or B")
+            return
         binding = self.profile.bindings.get(self.selected)
         self.filling = True
         self.editor_title.set_text(source_title(self.selected))
@@ -589,17 +662,8 @@ class RetroWindow(Adw.ApplicationWindow):
         self._paint_summary()
 
     def _paint(self) -> None:
-        for code, (button, caption) in self.pads.items():
-            binding = self.profile.bindings.get(code)
-            caption.set_text("—" if binding is None else binding.summary())
-            if code == self.selected:
-                button.add_css_class("is-selected")
-            else:
-                button.remove_css_class("is-selected")
-            if binding is None:
-                button.remove_css_class("is-on")
-            else:
-                button.add_css_class("is-on")
+        self._paint_sources()
+        self._mark_find()
         self._paint_others()
         self._paint_summary()
         self._paint_listen()
@@ -608,7 +672,72 @@ class RetroWindow(Adw.ApplicationWindow):
         else:
             self.write_btn.remove_css_class("suggested-action")
 
+    def _target_key(self) -> int | None:
+        """Cap that shows the key this source will send, when one is drawn."""
+
+        if self.selected is None:
+            return None
+        binding = self.profile.bindings.get(self.selected)
+        if binding is None or binding.kind != "key":
+            return None
+        if binding.usage:
+            return board_key_for_usage(binding.usage)
+        return board_key_for_usage(binding.mod)
+
+    def _paint_sources(self) -> None:
+        hits = set(search_hits(self.find_query))
+        target = self._target_key()
+        seen_cards: set[int] = set()
+        for code, card in self.jack_cards.items():
+            card_id = id(card)
+            if card_id in seen_cards:
+                continue
+            seen_cards.add(card_id)
+            if self.selected_jack == card.jack_name:
+                card.add_css_class("is-selected")
+            else:
+                card.remove_css_class("is-selected")
+        for code, (button, caption) in self.pads.items():
+            self._paint_button(code, button, hits)
+            binding = self.profile.bindings.get(code)
+            caption.set_text("—" if binding is None else binding.summary())
+        for code, button in self.keys.items():
+            self._paint_button(code, button, hits, target=code == target)
+
+    def _paint_button(self, code: int, button: Gtk.Button, hits: set[int], target: bool = False) -> None:
+        binding = self.profile.bindings.get(code)
+        title = source_title(code)
+        button.set_tooltip_text(title if binding is None else f"{title}: {binding.summary()}")
+        if code == self.selected:
+            button.add_css_class("is-selected")
+        else:
+            button.remove_css_class("is-selected")
+        if target:
+            button.add_css_class("is-target")
+        else:
+            button.remove_css_class("is-target")
+        if code in hits:
+            button.add_css_class("is-match")
+        else:
+            button.remove_css_class("is-match")
+        if binding is None:
+            button.remove_css_class("is-on")
+        else:
+            button.add_css_class("is-on")
+
+    def _mark_find(self) -> None:
+        index = 0
+        while (row := self.find_list.get_row_at_index(index)) is not None:
+            if getattr(row, "code", None) == self.selected:
+                row.add_css_class("is-selected")
+            else:
+                row.remove_css_class("is-selected")
+            index += 1
+
     def _paint_summary(self) -> None:
+        if self.selected is None:
+            self.editor_summary.set_text("Choose A or B")
+            return
         binding = self.profile.bindings.get(self.selected)
         self.editor_summary.set_text("Not set" if binding is None else binding.summary())
 
@@ -648,48 +777,6 @@ class RetroWindow(Adw.ApplicationWindow):
 
     def _on_other(self, _box, row) -> None:
         self._select(row.code)
-
-    def _pick_source(self) -> None:
-        dialog = Adw.Dialog(title="Edit another key", content_width=360, content_height=480)
-        search = Gtk.SearchEntry(placeholder_text="Search the keyboard")
-        listing = Gtk.ListBox()
-        listing.add_css_class("boxed-list")
-        listing.set_selection_mode(Gtk.SelectionMode.NONE)
-        listing.set_activate_on_single_click(True)
-
-        def refill(query: str) -> None:
-            while (row := listing.get_row_at_index(0)) is not None:
-                listing.remove(row)
-            needle = query.casefold().strip()
-            for code, name in KEYBOARD_SOURCES:
-                if needle and needle not in name.casefold():
-                    continue
-                label = Gtk.Label(label=name, xalign=0)
-                label.set_margin_start(8)
-                label.set_margin_top(4)
-                label.set_margin_bottom(4)
-                item = Gtk.ListBoxRow()
-                item.set_child(label)
-                item.code = code
-                listing.append(item)
-
-        def choose(_box, row) -> None:
-            dialog.close()
-            self._select(row.code)
-
-        search.connect("search-changed", lambda entry: refill(entry.get_text()))
-        listing.connect("row-activated", choose)
-        refill("")
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        box.set_margin_top(12)
-        box.set_margin_bottom(12)
-        box.set_margin_start(12)
-        box.set_margin_end(12)
-        scroll = Gtk.ScrolledWindow(vexpand=True, child=listing)
-        box.append(search)
-        box.append(scroll)
-        dialog.set_child(box)
-        dialog.present(self)
 
     def _on_name(self, entry: Gtk.Entry) -> None:
         if self.filling:
@@ -886,6 +973,8 @@ class RetroWindow(Adw.ApplicationWindow):
             self._assign(Binding("key", usage=usage))
 
     def _assign(self, binding: Binding | None, refill: bool = True) -> None:
+        if self.selected is None:
+            return
         if binding is None:
             self.profile.bindings.pop(self.selected, None)
         else:
