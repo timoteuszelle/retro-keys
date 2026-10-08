@@ -45,7 +45,7 @@ fi
 
 %files
 %license LICENSE
-%doc README.md
+%doc README.md screenshots
 %{_bindir}/retro-keys
 %{_prefix}/lib/retro-keys
 %{_udevrulesdir}/60-retro-keys.rules

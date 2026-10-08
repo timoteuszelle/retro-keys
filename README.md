@@ -4,6 +4,16 @@ A Linux configurator for the 8BitDo Retro Keyboard and the Dual Super Buttons th
 
 It writes the same kind of profile as Ultimate Software V2: one key, a modifier plus a key, or a macro with timing. The profile is stored on the keyboard.
 
+## Screenshots
+
+The Colour menu restyles the window. These are Fami, C64, and Xbox.
+
+![Retro Keys in the Fami colours](screenshots/fami.png)
+
+![Retro Keys in the C64 colours](screenshots/c64.png)
+
+![Retro Keys in the Xbox colours](screenshots/xbox.png)
+
 ## The keyboard
 
 8BitDo's own manual covers the hardware, including the mode switch, the heart button, and pairing. These are the parts that matter for Retro Keys:
