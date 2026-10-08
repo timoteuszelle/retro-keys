@@ -56,8 +56,6 @@ A local checkout works as well:
 inputs.retro-keys.url = "path:/path/to/retro-keys";
 ```
 
-The GitHub repository is private. Nix can fetch `github:timoteuszelle/retro-keys` when a GitHub token in `nix.conf` (`access-tokens`) can read it, or use `git+ssh://git@github.com/timoteuszelle/retro-keys.git`.
-
 Add the module and turn it on:
 
 ```nix
