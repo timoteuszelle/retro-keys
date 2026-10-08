@@ -132,6 +132,10 @@ make test
 
 The tests check the packet format and the on-screen layout. They do not open the keyboard.
 
+## Inspiration
+
+Two earlier Linux tools were useful inspiration while this was being written: [paulguy/8-retro-kbd-ctl](https://github.com/paulguy/8-retro-kbd-ctl) and [goncalor/8bitdo-kbd-mapper](https://github.com/goncalor/8bitdo-kbd-mapper).
+
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
