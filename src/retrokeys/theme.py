@@ -8,6 +8,8 @@ Edition.layout.
 
 Fami matches the keyboard this project was built against. N and M follow
 the product photos. C64 is a first pass at the beige and brown edition.
+Xbox is the translucent green Retro 87. Its arrow keys use the controller
+colours, and the window draws the case button separately.
 """
 
 from __future__ import annotations
@@ -78,6 +80,12 @@ button.pad.is-on.is-selected.is-match {
   border-radius: 18px;
   padding: 16px;
 }
+.editor.is-inactive {
+  background-color: @window@;
+  box-shadow: inset 0 0 0 2px @header@;
+}
+.editor.is-inactive .summary { color: @hint@; }
+.editor.is-inactive .editor-controls { opacity: 0.45; }
 .board {
   background-color: @board@;
   border-radius: 16px;
@@ -102,6 +110,13 @@ button.kb.enter { background-color: @enter_bg@; color: @enter_fg@; }
 button.kb.modifier { background-color: @modifier_bg@; color: @modifier_fg@; }
 button.kb.nav { background-color: @nav_bg@; color: @nav_fg@; }
 button.kb.arrow { background-color: @arrow_bg@; color: @arrow_fg@; }
+button.kb.xbox {
+  border-radius: 999px;
+  background-color: @accent@;
+  color: @accent_text@;
+  font-size: 11px;
+  font-weight: 800;
+}
 button.kb.space { background-color: @space_bg@; color: @space_fg@; }
 button.kb.super-a { background-color: @super_a_bg@; color: @super_a_fg@; }
 button.kb.super-b { background-color: @super_b_bg@; color: @super_b_fg@; }
@@ -235,12 +250,37 @@ class Palette:
         return text
 
 
+# Controller colours on the arrow cluster: up Y, left X, down A, right B.
+# Repeated after the shared rules so a target or a search match still wins.
+_XBOX_ARROWS = """
+button.kb.up { background-color: #f5c518; color: #241c04; }
+button.kb.left { background-color: #2f6fdb; color: #f4f8ff; }
+button.kb.down { background-color: #7ed321; color: #14280c; }
+button.kb.right { background-color: #e23b32; color: #fff6f4; }
+button.kb.up.is-target,
+button.kb.left.is-target,
+button.kb.down.is-target,
+button.kb.right.is-target {
+  background-color: #f2c200;
+  color: #241c04;
+}
+button.kb.up.is-match,
+button.kb.left.is-match,
+button.kb.down.is-match,
+button.kb.right.is-match {
+  background-color: #7ee7ff;
+  color: #102028;
+}
+"""
+
+
 @dataclass(frozen=True)
 class Edition:
     id: str
     name: str
     layout: str
     palette: Palette
+    extra_css: str = ""
 
 
 def _palette(**colors: str) -> Palette:
@@ -424,11 +464,56 @@ _C64 = _palette(
     super_b_fg="#3a2418",
 )
 
+_XBOX = _palette(
+    window="#101c14",
+    header="#16281c",
+    entry="#1e3426",
+    text="#f3fbe6",
+    hint="#c5ddb0",
+    card="#1a2e22",
+    editor="#15261c",
+    list_bg="#122018",
+    list_hover="#24382a",
+    list_selected="#2e4634",
+    accent="#3caf3c",
+    accent_text="#f4fff4",
+    selection="#f2c200",
+    mapped="#f2c200",
+    find="#7ee7ff",
+    find_text="#102028",
+    pad_a="#245c32",
+    pad_a_text="#e9f8c8",
+    pad_b="#163222",
+    pad_b_text="#d7efc4",
+    board="#3e7c36",
+    alpha_bg="#4f9444",
+    alpha_fg="#e7f6b4",
+    function_bg="#4f9444",
+    function_fg="#e7f6b4",
+    escape_bg="#4f9444",
+    escape_fg="#e7f6b4",
+    enter_bg="#4f9444",
+    enter_fg="#e7f6b4",
+    modifier_bg="#3d8638",
+    modifier_fg="#e7f6b4",
+    nav_bg="#3d8638",
+    nav_fg="#e7f6b4",
+    arrow_bg="#4f9444",
+    arrow_fg="#e7f6b4",
+    space_bg="#4f9444",
+    space_fg="#e7f6b4",
+    super_a_bg="#b6dc6a",
+    super_a_fg="#163010",
+    super_b_bg="#2f7a38",
+    super_b_fg="#f3ffe8",
+)
+
 EDITIONS: tuple[Edition, ...] = (
     Edition("fami", "Fami", "tkl", _FAMI),
     Edition("n", "N", "tkl", _N),
     Edition("m", "M", "tkl", _M),
     Edition("c64", "C64", "tkl", _C64),
+    Edition("xbox", "Xbox", "tkl", _XBOX, _XBOX_ARROWS),
 )
 
 BY_ID: dict[str, Edition] = {edition.id: edition for edition in EDITIONS}

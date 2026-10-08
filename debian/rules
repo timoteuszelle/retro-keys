@@ -1,0 +1,9 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+# Install into debian/tmp so dh_install can see the files. A single
+# binary package would otherwise install straight into debian/retro-keys.
+override_dh_auto_install:
+	$(MAKE) install DESTDIR=$(CURDIR)/debian/tmp PREFIX=/usr

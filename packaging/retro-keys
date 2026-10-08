@@ -1,0 +1,11 @@
+#!/usr/bin/python3
+"""Start Retro Keys from a /usr or /usr/local install."""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib" / "retro-keys"))
+
+from retrokeys.__main__ import main
+
+raise SystemExit(main())

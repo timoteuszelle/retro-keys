@@ -1,0 +1,5 @@
+usr/bin/retro-keys
+usr/lib/retro-keys
+usr/lib/udev/rules.d/60-retro-keys.rules
+usr/share/applications/online.meijokoen.RetroKeys.desktop
+usr/share/icons/hicolor/scalable/apps/online.meijokoen.RetroKeys.svg

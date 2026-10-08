@@ -1,8 +1,9 @@
 """Physical key positions for the Retro Keyboard.
 
-Every current colourway (Fami, N, M, C64) is this same 87-key tenkeyless
-layout. Super B and Super A sit between Right Alt and Right Ctrl. The
-external jack pads are not keys on this drawing.
+Every current colourway (Fami, N, M, C64, Xbox) is this same 87-key
+tenkeyless layout. Super B and Super A sit between Right Alt and Right
+Ctrl. The external jack pads are not keys on this drawing. The Xbox
+case button sits above this grid and is not one of these keys.
 
 A different body, such as the 108-key Retro or the 68-key N40, needs its
 own row list. Colour stays in theme.py. Spans are quarter key-units.
@@ -151,7 +152,7 @@ ROWS: tuple[tuple[KeyCell, ...], ...] = (
         # Up shares Down's column (the inverted T). The gap after Right
         # Shift is what lines that column up with the bottom row.
         gap(6),
-        key(0x52, "↑", "arrow", 4, "up"),
+        key(0x52, "↑", "arrow up", 4, "up"),
         gap(4),
     ),
     (
@@ -164,9 +165,9 @@ ROWS: tuple[tuple[KeyCell, ...], ...] = (
         key(0x6D, "A", "super-a", 4, "supera", "super a", usage=0),
         key(0x68, "Ctrl", "modifier", 5, "rctrl", usage=0xE4),
         gap(2),
-        key(0x50, "←", "arrow", 4, "left"),
-        key(0x51, "↓", "arrow", 4, "down"),
-        key(0x4F, "→", "arrow", 4, "right"),
+        key(0x50, "←", "arrow left", 4, "left"),
+        key(0x51, "↓", "arrow down", 4, "down"),
+        key(0x4F, "→", "arrow right", 4, "right"),
     ),
 )
 

@@ -3,3 +3,11 @@ __pycache__/
 .direnv/
 result
 result-*
+dist/
+*.egg-info/
+debian/files
+debian/retro-keys/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/*.substvars
+debian/*.debhelper.log

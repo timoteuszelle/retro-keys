@@ -41,7 +41,7 @@ _PAD = 76
 _JACK_OF = {code: name for name, button_a, button_b, _primary in JACKS for code in (button_a, button_b)}
 
 HINT = (
-    "One pad belongs in the X jack. Mappings are stored on the keyboard. "
+    "A Dual Super Buttons pad can use any jack. Mappings are stored on the keyboard. "
     "Press the heart button so its light is on, or the keyboard ignores them."
 )
 OFFLINE = (
@@ -70,7 +70,7 @@ class RetroApp(Adw.Application):
         # One stylesheet for the whole window, rebuilt from the colour edition.
         # New widgets should use the role classes (kb.alpha, pad.a, ...) rather
         # than a hard-coded colour, so the Colour menu can restyle them.
-        self._provider.load_from_string(edition.palette.css())
+        self._provider.load_from_string(edition.palette.css() + edition.extra_css)
         display = Gdk.Display.get_default()
         if display is not None and not self._provider_added:
             Gtk.StyleContext.add_provider_for_display(
@@ -138,7 +138,7 @@ class RetroWindow(Adw.ApplicationWindow):
         colour_label.add_css_class("hint")
         self.edition_drop = Gtk.DropDown.new_from_strings([edition.name for edition in EDITIONS])
         self.edition_drop.set_selected(EDITIONS.index(self.edition))
-        self.edition_drop.set_tooltip_text("Same keys on every edition. This changes the colours.")
+        self.edition_drop.set_tooltip_text("Colours follow the edition. Xbox also shows its case button.")
         self.edition_drop.connect("notify::selected", self._on_edition)
         colour.append(colour_label)
         colour.append(self.edition_drop)
@@ -284,6 +284,22 @@ class RetroWindow(Adw.ApplicationWindow):
         frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         frame.add_css_class("board")
         frame.set_halign(Gtk.Align.CENTER)
+        # The Xbox case button sits on the top-right bezel, outside the
+        # 87-key grid. It opens Game Bar and has no profile source code.
+        self.xbox_row = Gtk.Box()
+        self.xbox_row.set_halign(Gtk.Align.END)
+        self.xbox_row.set_margin_top(4)
+        self.xbox_row.set_margin_end(8)
+        self.xbox_row.set_margin_bottom(2)
+        xbox = Gtk.Button(label="XB")
+        xbox.add_css_class("kb")
+        xbox.add_css_class("xbox")
+        xbox.set_size_request(36, 36)
+        xbox.set_tooltip_text("Xbox button. Opens the Windows Game Bar. It is not stored in the profile.")
+        xbox.connect("clicked", self._on_xbox)
+        self.xbox_row.append(xbox)
+        frame.append(self.xbox_row)
+        self._show_xbox_button()
         for row in ROWS:
             line = Gtk.Box(spacing=0)
             for cell in row:
@@ -297,7 +313,8 @@ class RetroWindow(Adw.ApplicationWindow):
                     continue
                 button = Gtk.Button(label=cell.label)
                 button.add_css_class("kb")
-                button.add_css_class(cell.role)
+                for name in cell.role.split():
+                    button.add_css_class(name)
                 button.set_size_request(cell.span * _CELL - 4, _CELL * 4 - 4)
                 button.set_halign(Gtk.Align.CENTER)
                 button.set_valign(Gtk.Align.CENTER)
@@ -318,12 +335,19 @@ class RetroWindow(Adw.ApplicationWindow):
         scroll.set_propagate_natural_height(True)
         return scroll
 
+    def _show_xbox_button(self) -> None:
+        self.xbox_row.set_visible(self.edition.id == "xbox")
+
+    def _on_xbox(self, *_args) -> None:
+        self._toast("The Xbox button opens Game Bar. It is not stored in the profile.")
+
     def _on_edition(self, dropdown, _param) -> None:
         index = dropdown.get_selected()
         if index < 0 or index >= len(EDITIONS) or EDITIONS[index].id == self.edition.id:
             return
         self.edition = EDITIONS[index]
         save_edition_id(self.edition.id)
+        self._show_xbox_button()
         app = self.get_application()
         if isinstance(app, RetroApp):
             app.apply_edition(self.edition)
@@ -386,6 +410,7 @@ class RetroWindow(Adw.ApplicationWindow):
         card.add_css_class("editor")
         card.set_size_request(380, -1)
         card.set_vexpand(True)
+        self.editor_card = card
         self.editor_title = Gtk.Label(xalign=0)
         self.editor_title.add_css_class("hint")
         self.editor_summary = Gtk.Label(xalign=0)
@@ -394,6 +419,7 @@ class RetroWindow(Adw.ApplicationWindow):
         card.append(self.editor_summary)
 
         self.editor_controls = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, vexpand=True)
+        self.editor_controls.add_css_class("editor-controls")
         card.append(self.editor_controls)
         self.mode = Gtk.Stack()
         self.mode.add_named(self._key_page(), "key")
@@ -631,12 +657,22 @@ class RetroWindow(Adw.ApplicationWindow):
         self._fill_editor()
         self._paint()
 
+    def _set_editor_active(self, active: bool) -> None:
+        # The key, chord, and macro listing stays put. A jack with no button
+        # is the same frame, insensitive, and the card colour shows that.
+        if active:
+            self.editor_card.remove_css_class("is-inactive")
+        else:
+            self.editor_card.add_css_class("is-inactive")
+        self.editor_controls.set_sensitive(active)
+
     def _fill_editor(self) -> None:
         jack_only = self.selected is None
-        self.editor_controls.set_visible(not jack_only)
+        self.editor_controls.set_visible(True)
+        self._set_editor_active(not jack_only)
         if jack_only:
             self.editor_title.set_text(f"Jack {self.selected_jack}" if self.selected_jack else "")
-            self.editor_summary.set_text("Choose A or B")
+            self.editor_summary.set_text("Not set")
             return
         binding = self.profile.bindings.get(self.selected)
         self.filling = True
@@ -736,7 +772,7 @@ class RetroWindow(Adw.ApplicationWindow):
 
     def _paint_summary(self) -> None:
         if self.selected is None:
-            self.editor_summary.set_text("Choose A or B")
+            self.editor_summary.set_text("Not set")
             return
         binding = self.profile.bindings.get(self.selected)
         self.editor_summary.set_text("Not set" if binding is None else binding.summary())
@@ -785,6 +821,8 @@ class RetroWindow(Adw.ApplicationWindow):
         self._paint()
 
     def _toggle_listen(self, chord: bool = False) -> None:
+        if self.selected is None:
+            return
         want = "chord" if chord else "key"
         if self.listening and self.mode.get_visible_child_name() == want:
             self.listening = False
@@ -795,6 +833,8 @@ class RetroWindow(Adw.ApplicationWindow):
         self._paint_listen()
 
     def _toggle_record(self) -> None:
+        if self.selected is None:
+            return
         self.recording = not self.recording
         self.listening = False
         if self.recording:
@@ -809,6 +849,8 @@ class RetroWindow(Adw.ApplicationWindow):
         self._paint_listen()
 
     def _on_key_pressed(self, _controller, keyval: int, keycode: int, _state) -> bool:
+        if self.selected is None:
+            return False
         if keyval == Gdk.KEY_Escape and self.listening:
             self.listening = False
             self._paint_listen()

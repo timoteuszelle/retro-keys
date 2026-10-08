@@ -12,7 +12,7 @@ and the Super Buttons do not.
 from __future__ import annotations
 
 # External Dual Super Buttons, one A/B pair per 3.5 mm jack.
-# A single pad is only recognized in the X jack.
+# A pad works in any of A, B, X, and Y. The bool is unused by the window.
 JACKS: tuple[tuple[str, int, int, bool], ...] = (
     ("A", 0x74, 0x75, False),
     ("B", 0x72, 0x73, False),

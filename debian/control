@@ -1,0 +1,22 @@
+Source: retro-keys
+Section: utils
+Priority: optional
+Maintainer: Tim Oudesluijs-Zelle <tim@oudesluijszelle.nl>
+Build-Depends: debhelper-compat (= 13), make, python3
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/timoteuszelle/retro-keys
+
+Package: retro-keys
+Architecture: all
+Depends: ${misc:Depends},
+ python3 (>= 3.11),
+ python3-gi,
+ gir1.2-gtk-4.0,
+ gir1.2-adw-1 (>= 1.5),
+ adwaita-icon-theme,
+ udev
+Description: program 8BitDo Retro Keyboard Super Buttons
+ Retro Keys stores a profile on an 8BitDo Retro Keyboard. A mapping is
+ one key, a modifier plus a key, or a macro. A Dual Super Buttons pad
+ can use any of the A, B, X, and Y jacks.

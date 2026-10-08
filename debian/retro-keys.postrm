@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    if [ -x /usr/bin/udevadm ]; then
+        udevadm control --reload-rules || true
+        udevadm trigger --subsystem-match=hidraw || true
+    fi
+fi
+#DEBHELPER#
+exit 0

@@ -75,9 +75,16 @@ class ThemeTests(unittest.TestCase):
             self.assertIn(edition.palette.selection, css)
             self.assertIn("button.kb.super-a", css)
             self.assertIn("button.kb.is-target", css)
+            self.assertIn(".editor.is-inactive", css)
+            self.assertIn(".editor-controls", css)
             accents.add(edition.palette.accent)
         self.assertGreater(len(accents), 1)
         self.assertEqual(edition_by_id("missing").id, "fami")
+        xbox = edition_by_id("xbox")
+        self.assertEqual(xbox.layout, "tkl")
+        self.assertIn("button.kb.up", xbox.extra_css)
+        self.assertIn("button.kb.right", xbox.extra_css)
+        self.assertEqual(edition_by_id("fami").extra_css, "")
 
     def test_edition_choice_is_remembered(self):
         with tempfile.TemporaryDirectory() as tmp:
